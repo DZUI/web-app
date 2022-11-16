@@ -36,8 +36,17 @@ module.exports = {
       warnings: false,
       errors: true
     },
-    before: require('./mock/mock-server.js'),
-    https: true
+    // before: require('./mock/mock-server.js'),
+    https: true,
+    proxy: {
+      '/api': {
+          target: 'https://huijiawu.pythonanywhere.com',
+          pathRewrite: {
+            '^/api': '/api'  // 重写地址
+          },
+          changeOrigin: true
+      },
+  }
   },
   configureWebpack: {
     // provide the app's title in webpack's name field, so that

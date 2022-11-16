@@ -180,7 +180,7 @@ export default {
         const { data } = await getRecommend({
           'data': {
             'user': 0,
-            'item': this.mainArticle?.item ? [this.mainArticle.item] : [],
+            'item': this.mainArticle?.item ? [this.mainArticle.item] : ['初始'],
             'context': ['gaze_feat1', 'gaze_feat2', 'gaze_feat3']
           },
           'controller': {
