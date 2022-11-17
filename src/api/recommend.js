@@ -7,3 +7,12 @@ export function getRecommend(query) {
     data: query
   })
 }
+
+export function getHighlight(query) {
+    return request({
+      url: '/api/highlight',
+      method: 'post',
+      data: query
+    })
+  }
+  

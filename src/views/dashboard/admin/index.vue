@@ -1,10 +1,10 @@
 <template>
   <div class="dashboard-editor-container">
-    <div class="main-article-container">
+    <div class="main-article-container" v-loading="loading">
       <div class="main-article article-item" area-name="main">
         {{ mainArticle.item }}
       </div>
-      <div v-loading="loading" class="more-article">
+      <div class="more-article">
         <el-row>
           <el-col v-for="(article, index) in moreArtcleList" :key="index" :xs="24" :sm="24" :lg="8">
             <div class="more-article-item article-item" :area-name="'article' + (index + 1)">
@@ -23,8 +23,12 @@
         <template slot="append">ms</template>
       </el-input>
       <br>
-      其他域停留推荐阈值
+      底部域停留推荐阈值
       <el-input v-model="changeToMainTime" size="mini">
+        <template slot="append">ms</template>
+      </el-input>
+      空白域停留推荐阈值
+      <el-input v-model="blankTime" size="mini">
         <template slot="append">ms</template>
       </el-input>
       <el-divider />
@@ -43,13 +47,13 @@
 
 <script>
 import $ from 'jquery'
-import { getRecommend } from '@/api/recommend'
+import { getRecommend, getHighlight } from '@/api/recommend'
 const refreshTime = 300
 
 const throttle = (func, wait = 50) => {
   // 上一次执行该函数的时间
   let lastTime = 0
-  return function(...args) {
+  return function (...args) {
     // 当前时间
     const now = +new Date()
     // 将当前时间和上一次执行函数时间对比
@@ -80,7 +84,9 @@ export default {
       csvData: [],
       changeToMainTime: 3000,
       resetRecommedTime: 5000,
-      loading: false
+      blankTime: 5000,
+      loading: false,
+      highlightText: [],
     }
   },
   watch: {
@@ -108,7 +114,7 @@ export default {
     this.getRecommond()
   },
   methods: {
-    caculatePosition: throttle(function(data, timestamp) {
+    caculatePosition: throttle(function (data, timestamp) {
       if (data == null) return
 
       const { x, y } = data
@@ -130,18 +136,21 @@ export default {
         return
       }
 
-      if (this.eyePotiner.areaName !== 'main' && (this.eyePotiner.nowTimestamp - this.eyePotiner.resetRecommedTimestamp) > this.changeToMainTime) {
-        // 非主区域3s以上，切换文章到主区域
+      if (this.eyePotiner.areaName === 'main' && (this.eyePotiner.nowTimestamp - this.eyePotiner.resetRecommedTimestamp) > this.resetRecommedTime) {
+        // 主区域5s以上，且推荐时间超过5s，拉取高亮接口
+        this.getHighlight()
+        this.eyePotiner.resetRecommedTimestamp = timestamp
+      } else if (this.eyePotiner.areaName === '-' && (this.eyePotiner.nowTimestamp - this.eyePotiner.resetRecommedTimestamp) > this.blankTime) {
+        // 空白区域5s以上，且推荐时间超过5s，拉取推荐接口
+        this.getRecommond(true)
+        this.eyePotiner.resetRecommedTimestamp = timestamp
+      } else if ((this.eyePotiner.areaName !== 'main' && this.eyePotiner.areaName !== '') && (this.eyePotiner.nowTimestamp - this.eyePotiner.resetRecommedTimestamp) > this.changeToMainTime) {
+        // 底部文章区域3s以上，切换文章到主区域
         const activeAreaIndex = this.areas.findIndex((value) => value.areaName === this.eyePotiner.areaName)
         this.csvData.splice(0, 1, JSON.parse(JSON.stringify(this.csvData[activeAreaIndex])))
-        // console.log(JSON.stringify(this.csvData))
         this.$nextTick(() => {
           this.eyePotiner.resetRecommedTimestamp = timestamp
         })
-      } else if (this.eyePotiner.areaName === 'main' && (this.eyePotiner.nowTimestamp - this.eyePotiner.resetRecommedTimestamp) > this.resetRecommedTime) {
-        // 主区域5s以上，且推荐时间超过5s，重新请求一下下方的推荐
-        this.getRecommond()
-        this.eyePotiner.resetRecommedTimestamp = timestamp
       }
     }, refreshTime),
     getAreas() {
@@ -161,18 +170,18 @@ export default {
       console.log(this.areas)
     },
     checkInWitchArea(x, y) {
-      let areaName = ''
+      let areaName = '-'
       for (let i = 0; i < this.areas.length; i++) {
         const area = this.areas[i]
         if (x > area.left && x < (area.left + area.width) && y > area.top && y < (area.top + area.height)) {
-          areaName = area.areaName
+          areaName = area.areaName || '-'
           break
         }
       }
 
       return areaName
     },
-    async getRecommond() {
+    async getRecommond(refresh = false) {
       this.loading = true
 
       try {
@@ -180,7 +189,7 @@ export default {
         const { data } = await getRecommend({
           'data': {
             'user': 0,
-            'item': this.mainArticle?.item ? [this.mainArticle.item] : ['初始'],
+            'item': refresh ? [''] : this.mainArticle?.item ? [this.mainArticle.item] : [''],
             'context': ['gaze_feat1', 'gaze_feat2', 'gaze_feat3']
           },
           'controller': {
@@ -222,6 +231,30 @@ export default {
           this.csvData = csvData
           this.loading = false
         }, 600)
+      }
+    },
+    async getHighlight() {
+      try {
+        // 请求数据
+        const { data } = await getHighlight({
+            "data": {
+                "user": 0,
+                'item': this.mainArticle?.item ? [this.mainArticle.item] : [''],
+                "context": [
+                    "gaze_feat1",
+                    "gaze_feat2",
+                    "gaze_feat3"
+                ]
+            },
+            "config": {
+                "model_type": 0
+            },
+            "debug": 0
+        });
+        console.log(data)
+        this.highlightText = data
+      } catch (error) {
+        console.log(error);
       }
     },
     random(a, b) { // 随机函数  随机生成a和b之间的一个数
