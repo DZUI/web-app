@@ -9,10 +9,18 @@ export function getRecommend(query) {
 }
 
 export function getHighlight(query) {
-    return request({
-      url: '/api/highlight',
-      method: 'post',
-      data: query
-    })
-  }
+  return request({
+    url: '/api/highlight',
+    method: 'post',
+    data: query
+  })
+}
+
+export function getContent(query) {
+  return request({
+    url: '/api/content',
+    method: 'post',
+    data: query
+  })
+}
   

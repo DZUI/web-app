@@ -3,6 +3,8 @@
     <div class="main-article-container" v-loading="loading">
       <div class="main-article article-item" area-name="main">
         {{ mainArticle.item }}
+        <div class="article-content" v-html="brightenKeyword(mainArticleContent, highlightTextArr)">
+        </div>
       </div>
       <div class="more-article">
         <el-row>
@@ -41,13 +43,22 @@
       x: {{ eyePotiner.x.toFixed(1) }}
       <br>
       y: {{ eyePotiner.y.toFixed(1) }}
+      <br>
+      高亮接口发送请求中: {{ highlightLoading ? '是' : '否'}}
+      <br>
+      推荐接口debug信息: 
+      <div class="debug-info">
+        <json-viewer
+        :value="csvData"
+        :expand-depth=3></json-viewer>
+      </div>
     </div>
   </div>
 </template>
 
 <script>
 import $ from 'jquery'
-import { getRecommend, getHighlight } from '@/api/recommend'
+import { getRecommend, getHighlight, getContent } from '@/api/recommend'
 const refreshTime = 300
 
 const throttle = (func, wait = 50) => {
@@ -71,6 +82,7 @@ export default {
   data() {
     return {
       mainArticle: '',
+      mainArticleContent: '',
       moreArtcleList: [],
       eyePotiner: {
         x: 0,
@@ -86,7 +98,8 @@ export default {
       resetRecommedTime: 5000,
       blankTime: 5000,
       loading: false,
-      highlightText: [],
+      highlightTextArr: [],
+      highlightLoading: false,
     }
   },
   watch: {
@@ -101,6 +114,11 @@ export default {
     },
     'eyePotiner.areaName'(newVal) {
       this.hasChanged = false
+    },
+    mainArticle(newVal) {
+      if (newVal) {
+        this.getContent()
+      }
     }
   },
   mounted() {
@@ -121,36 +139,40 @@ export default {
       this.eyePotiner.x = x
       this.eyePotiner.y = y
 
-      // 获取停留区域名称
-      const areaName = this.checkInWitchArea(x, y)
-      // 如果区域名称有变化，则更新时间
-      if (this.eyePotiner.areaName !== areaName) {
-        this.eyePotiner.areaName = areaName
-        this.eyePotiner.startTimestamp = timestamp
-        this.eyePotiner.resetRecommedTimestamp = timestamp
-      }
-      this.eyePotiner.nowTimestamp = timestamp
-
-      // 如果没在可视区域，则不继续了
-      if (!this.eyePotiner.areaName) {
-        return
-      }
-
-      if (this.eyePotiner.areaName === 'main' && (this.eyePotiner.nowTimestamp - this.eyePotiner.resetRecommedTimestamp) > this.resetRecommedTime) {
-        // 主区域5s以上，且推荐时间超过5s，拉取高亮接口
-        this.getHighlight()
-        this.eyePotiner.resetRecommedTimestamp = timestamp
-      } else if (this.eyePotiner.areaName === '-' && (this.eyePotiner.nowTimestamp - this.eyePotiner.resetRecommedTimestamp) > this.blankTime) {
-        // 空白区域5s以上，且推荐时间超过5s，拉取推荐接口
-        this.getRecommond(true)
-        this.eyePotiner.resetRecommedTimestamp = timestamp
-      } else if ((this.eyePotiner.areaName !== 'main' && this.eyePotiner.areaName !== '') && (this.eyePotiner.nowTimestamp - this.eyePotiner.resetRecommedTimestamp) > this.changeToMainTime) {
-        // 底部文章区域3s以上，切换文章到主区域
-        const activeAreaIndex = this.areas.findIndex((value) => value.areaName === this.eyePotiner.areaName)
-        this.csvData.splice(0, 1, JSON.parse(JSON.stringify(this.csvData[activeAreaIndex])))
-        this.$nextTick(() => {
+      try {
+        // 获取停留区域名称
+        const areaName = this.checkInWitchArea(x, y)
+        // 如果区域名称有变化，则更新时间
+        if (this.eyePotiner.areaName !== areaName) {
+          this.eyePotiner.areaName = areaName
+          this.eyePotiner.startTimestamp = timestamp
           this.eyePotiner.resetRecommedTimestamp = timestamp
-        })
+        }
+        this.eyePotiner.nowTimestamp = timestamp
+
+        // 如果没在可视区域，则不继续了
+        if (!this.eyePotiner.areaName) {
+          return
+        }
+
+        if (this.eyePotiner.areaName === 'main' && (this.eyePotiner.nowTimestamp - this.eyePotiner.resetRecommedTimestamp) > this.resetRecommedTime) {
+          // 主区域5s以上，且推荐时间超过5s，拉取高亮接口
+          this.getHighlight()
+          this.eyePotiner.resetRecommedTimestamp = timestamp
+        } else if (this.eyePotiner.areaName === '-' && (this.eyePotiner.nowTimestamp - this.eyePotiner.resetRecommedTimestamp) > this.blankTime) {
+          // 空白区域5s以上，且推荐时间超过5s，拉取推荐接口
+          this.getRecommond(true)
+          this.eyePotiner.resetRecommedTimestamp = timestamp
+        } else if ((this.eyePotiner.areaName !== 'main' && this.eyePotiner.areaName !== '') && (this.eyePotiner.nowTimestamp - this.eyePotiner.resetRecommedTimestamp) > this.changeToMainTime) {
+          // 底部文章区域3s以上，切换文章到主区域
+          const activeAreaIndex = this.areas.findIndex((value) => value.areaName === this.eyePotiner.areaName)
+          this.csvData.splice(0, 1, JSON.parse(JSON.stringify(this.csvData[activeAreaIndex])))
+          this.$nextTick(() => {
+            this.eyePotiner.resetRecommedTimestamp = timestamp
+          })
+        }
+      } catch (error) {
+
       }
     }, refreshTime),
     getAreas() {
@@ -234,31 +256,63 @@ export default {
       }
     },
     async getHighlight() {
+      if (this.highlightLoading) {
+        return
+      }
+      this.highlightLoading = true
       try {
         // 请求数据
         const { data } = await getHighlight({
-            "data": {
-                "user": 0,
-                'item': this.mainArticle?.item ? [this.mainArticle.item] : [''],
-                "context": [
-                    "gaze_feat1",
-                    "gaze_feat2",
-                    "gaze_feat3"
-                ]
-            },
-            "config": {
-                "model_type": 0
-            },
-            "debug": 0
+          "data": {
+            "user": 0,
+            'item': this.mainArticleContent ? [this.mainArticleContent] : [''],
+            "context": [
+              "gaze_feat1",
+              "gaze_feat2",
+              "gaze_feat3"
+            ]
+          },
+          "config": {
+            "model_type": 0
+          },
+          "debug": 0
         });
-        console.log(data)
-        this.highlightText = data
+        this.highlightTextArr = data.map((value) => value.item)
       } catch (error) {
-        console.log(error);
+        console.log(error)
       }
+      this.highlightLoading = false
+    },
+    // 高亮
+    brightenKeyword(val, keywords = []) {
+      if (!val) {
+        return val;
+      }
+      keywords.forEach(item => {
+        if (val.indexOf(item) !== -1 && item !== "") {
+          val = val.replace(
+            new RegExp(item, 'g'),
+            '<font color="#f75353">' + item + "</font>"
+          );
+        }
+      });
+      return val;
     },
     random(a, b) { // 随机函数  随机生成a和b之间的一个数
       return Math.round(Math.random() * (b - a) + a) // 公式
+    },
+    async getContent() {
+      try {
+        // 请求数据
+        const res = await getContent({
+          key: this.mainArticle?.item
+        });
+        this.mainArticleContent = res.value
+
+        // this.getHighlight();
+      } catch (error) {
+        console.log(error)
+      }
     }
   }
 }
@@ -280,6 +334,11 @@ export default {
     z-index: 99;
     font-size: 12px;
     line-height: 20px;
+
+    .debug-info {
+      height: 240px;
+      overflow: auto;
+    }
   }
 
   .main-article-container {
@@ -298,6 +357,11 @@ export default {
       flex: 1;
       overflow-y: auto;
       padding: 12px;
+
+      .article-content {
+        padding: 20px 200px;
+        line-height: 24px;
+      }
     }
 
     .more-article {
