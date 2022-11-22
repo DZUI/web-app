@@ -2,11 +2,19 @@
   <div class="dashboard-editor-container">
     <div class="main-article-container" v-loading="loading">
       <div class="main-article article-item" area-name="main">
-        {{ mainArticle.item }}
-        <div class="article-content" v-html="brightenKeyword(mainArticleContent, highlightTextArr)">
+        <div class="title">
+          {{ mainArticle.item }}
+        </div>
+        <div class="sub-title">
+          {{ highlightTextArr[0] }}
+        </div>
+        <div class="article-content">
+          <p v-for="(item, index) in mainArticleContentArr" :key="index" class="article-content-text">
+            {{ item }}
+          </p>
         </div>
       </div>
-      <div class="more-article">
+      <div class="more-article" v-loading="bottomLoading">
         <el-row>
           <el-col v-for="(article, index) in moreArtcleList" :key="index" :xs="24" :sm="24" :lg="8">
             <div class="more-article-item article-item" :area-name="'article' + (index + 1)">
@@ -98,8 +106,14 @@ export default {
       resetRecommedTime: 5000,
       blankTime: 5000,
       loading: false,
+      bottomLoading: false,
       highlightTextArr: [],
       highlightLoading: false,
+    }
+  },
+  computed: {
+    mainArticleContentArr() {
+      return this.mainArticleContent.split('\n');
     }
   },
   watch: {
@@ -162,11 +176,13 @@ export default {
         } else if (this.eyePotiner.areaName === '-' && (this.eyePotiner.nowTimestamp - this.eyePotiner.resetRecommedTimestamp) > this.blankTime) {
           // 空白区域5s以上，且推荐时间超过5s，拉取推荐接口
           this.getRecommond(true)
+          this.highlightTextArr = []
           this.eyePotiner.resetRecommedTimestamp = timestamp
         } else if ((this.eyePotiner.areaName !== 'main' && this.eyePotiner.areaName !== '') && (this.eyePotiner.nowTimestamp - this.eyePotiner.resetRecommedTimestamp) > this.changeToMainTime) {
           // 底部文章区域3s以上，切换文章到主区域
           const activeAreaIndex = this.areas.findIndex((value) => value.areaName === this.eyePotiner.areaName)
           this.csvData.splice(0, 1, JSON.parse(JSON.stringify(this.csvData[activeAreaIndex])))
+          this.highlightTextArr = []
           this.$nextTick(() => {
             this.eyePotiner.resetRecommedTimestamp = timestamp
           })
@@ -203,15 +219,28 @@ export default {
 
       return areaName
     },
-    async getRecommond(refresh = false) {
-      this.loading = true
+    async getRecommond(refresh = false, append = false) {
+      if (append) {
+        this.bottomLoading = true
+      } else {
+        this.loading = true
+      }
 
       try {
         // 请求数据
         const { data } = await getRecommend({
           'data': {
             'user': 0,
-            'item': refresh ? [''] : this.mainArticle?.item ? [this.mainArticle.item] : [''],
+            'item': refresh ? [{
+              title: '',
+              content: ''
+            }] : this.mainArticle?.item ? [{
+              title: this.mainArticle.item,
+              content: this.highlightTextArr.join(',')
+            }] : [{
+              title: '',
+              content: ''
+            }],
             'context': ['gaze_feat1', 'gaze_feat2', 'gaze_feat3']
           },
           'controller': {
@@ -232,8 +261,17 @@ export default {
           'debug': 0
         })
         console.log(data)
+        
+        if (append && this.csvData.length !== 0) {
+          let first
+          first = JSON.parse(JSON.stringify(this.csvData[0]))
+          data.unshift(first)
+          data.splice(data.length - 1, 1)
+        }
+
         this.csvData = data
         this.loading = false
+        this.bottomLoading = false
       } catch (error) {
         // 请求出错兜底
         let first
@@ -282,6 +320,7 @@ export default {
         console.log(error)
       }
       this.highlightLoading = false
+      this.getRecommond(false, true)
     },
     // 高亮
     brightenKeyword(val, keywords = []) {
@@ -307,7 +346,7 @@ export default {
         const res = await getContent({
           key: this.mainArticle?.item
         });
-        this.mainArticleContent = res.value
+        this.mainArticleContent = res.value;
 
         // this.getHighlight();
       } catch (error) {
@@ -358,9 +397,26 @@ export default {
       overflow-y: auto;
       padding: 12px;
 
+      .title {
+        font-size: 16px;
+        font-weight: bold;
+      }
+
+      .sub-title {
+        height: 60px;
+        padding: 10px 200px;
+        color: #999;
+      }
+
       .article-content {
-        padding: 20px 200px;
+        padding: 0px 200px;
         line-height: 24px;
+        
+        .article-content-text {
+          white-space: pre-wrap;
+          text-align: left;
+          text-indent: 2em;
+        }
       }
     }
 
