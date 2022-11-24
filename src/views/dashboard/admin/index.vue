@@ -273,6 +273,7 @@ export default {
         this.loading = false
         this.bottomLoading = false
       } catch (error) {
+        this.bottomLoading = true
         // 请求出错兜底
         let first
         if (this.csvData.length !== 0) {
