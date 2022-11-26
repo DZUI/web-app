@@ -8,24 +8,26 @@
         <div class="sub-title">
           {{ highlightTextArr[0] }}
         </div>
-        <div class="article-content">
+        <div class="article-content" v-loading="mainArticleLoading">
           <p v-for="(item, index) in mainArticleContentArr" :key="index" class="article-content-text">
             {{ item }}
           </p>
         </div>
       </div>
       <div class="more-article" v-loading="bottomLoading">
-        <el-row>
-          <el-col v-for="(article, index) in moreArtcleList" :key="index" :xs="24" :sm="24" :lg="8">
-            <div class="more-article-item article-item" :area-name="'article' + (index + 1)">
+        <el-button type="primary" icon="el-icon-refresh" size="mini" style="margin-bottom: 20px;" @click="getRecommond(false, true)">换一批</el-button>
+        <div v-if="moreArtcleList.length === 0" class="more-article-item nomore">暂无更多</div>
+        <div v-for="(article, index) in moreArtcleList" :key="index">
+          <el-tooltip effect="dark" :content="article.item" placement="top-start">
+            <div class="more-article-item article-item" :area-name="'article' + (index + 1)" @click="changeMainContent(article)">
               {{ article.item }}
             </div>
-          </el-col>
-        </el-row>
+          </el-tooltip>
+        </div>
       </div>
     </div>
 
-    <div class="info-block">
+    <div v-if="false" class="info-block">
       当前追踪刷新率 300 ms
       <br>
       主区域停留推荐阈值
@@ -109,6 +111,7 @@ export default {
       bottomLoading: false,
       highlightTextArr: [],
       highlightLoading: false,
+      mainArticleLoading: false,
     }
   },
   computed: {
@@ -129,19 +132,14 @@ export default {
     'eyePotiner.areaName'(newVal) {
       this.hasChanged = false
     },
-    mainArticle(newVal) {
-      if (newVal) {
-        this.getContent()
-      }
-    }
   },
   mounted() {
-    window.saveDataAcrossSessions = true
-    window.webgazer
-      .setGazeListener((data, timestamp) => {
-        // console.log(data, timestamp)
-        this.caculatePosition(data, timestamp)
-      }).begin()
+    // window.saveDataAcrossSessions = true
+    // window.webgazer
+    //   .setGazeListener((data, timestamp) => {
+    //     // console.log(data, timestamp)
+    //     this.caculatePosition(data, timestamp)
+    //   }).begin()
 
     this.getRecommond()
   },
@@ -272,6 +270,12 @@ export default {
         this.csvData = data
         this.loading = false
         this.bottomLoading = false
+
+        this.$nextTick(() => {
+          if (!refresh && !append) {
+            this.getContent();
+          }
+        })
       } catch (error) {
         this.bottomLoading = true
         // 请求出错兜底
@@ -321,7 +325,7 @@ export default {
         console.log(error)
       }
       this.highlightLoading = false
-      this.getRecommond(false, true)
+      // this.getRecommond(false, true)
     },
     // 高亮
     brightenKeyword(val, keywords = []) {
@@ -342,17 +346,30 @@ export default {
       return Math.round(Math.random() * (b - a) + a) // 公式
     },
     async getContent() {
+      this.mainArticleLoading = true
+
       try {
         // 请求数据
         const res = await getContent({
           key: this.mainArticle?.item
         });
-        this.mainArticleContent = res.value;
+        this.mainArticleContent = res.value
 
-        // this.getHighlight();
+        this.getHighlight();
       } catch (error) {
         console.log(error)
       }
+
+      this.mainArticleLoading = false
+    },
+    changeMainContent(item) {
+      this.csvData.splice(0, 1, JSON.parse(JSON.stringify(item)))
+      this.highlightTextArr = []
+      this.$nextTick(() => {
+        this.mainArticleContent = ''
+        this.getContent();
+        this.getRecommond(false, true);
+      })
     }
   }
 }
@@ -386,10 +403,9 @@ export default {
     width: 1200px;
     display: flex;
     margin: 0 auto;
-    flex-direction: column;
 
     .article-item {
-      border: 1px solid black;
+      // border: 1px solid black;
       text-align: center;
     }
 
@@ -397,20 +413,21 @@ export default {
       flex: 1;
       overflow-y: auto;
       padding: 12px;
+      padding-top: 40px;
+      background-color: #fff;
 
       .title {
-        font-size: 16px;
+        font-size: 18px;
         font-weight: bold;
       }
 
       .sub-title {
-        height: 60px;
-        padding: 10px 200px;
+        padding: 20px 100px 0;
         color: #999;
       }
 
       .article-content {
-        padding: 0px 200px;
+        padding: 0px 100px;
         line-height: 24px;
         
         .article-content-text {
@@ -422,13 +439,32 @@ export default {
     }
 
     .more-article {
+      padding-top: 40px;
       flex-shrink: 0;
-      height: 240px;
+      width: 300px;
       overflow: hidden;
+      flex-direction: column;
+      text-align: center;
+      background-color: #fff;
+      border-left: 1px solid #e5e8ef;
 
       .more-article-item {
-        padding: 12px;
-        height: 240px;
+        padding: 0 12px;
+        margin-top: 24px;
+        text-align: left;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        width: 100%;
+        white-space: nowrap;
+        cursor: pointer;
+
+        &:hover {
+          color: #1890ff;
+        }
+
+        &.nomore {
+          color: #999;
+        }
       }
     }
   }
