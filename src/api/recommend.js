@@ -23,4 +23,12 @@ export function getContent(query) {
     data: query
   })
 }
+
+export function uploadUserLog(query) {
+  return request({
+    url: '/api/add_useract_to_db',
+    method: 'post',
+    data: query
+  })
+}
   

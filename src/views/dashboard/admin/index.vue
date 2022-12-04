@@ -9,13 +9,13 @@
           {{ highlightTextArr[0] }}
         </div>
         <div class="article-content" v-loading="mainArticleLoading">
-          <p v-for="(item, index) in mainArticleContentArr" :key="index" class="article-content-text">
+          <p v-for="(item, index) in mainArticleContentArr" :key="index" class="article-content-text" @click="recByParagraph(item)">
             {{ item }}
           </p>
         </div>
       </div>
       <div class="more-article" v-loading="bottomLoading">
-        <el-button type="primary" icon="el-icon-refresh" size="mini" style="margin-bottom: 20px;" @click="getRecommond(false, true)">换一批</el-button>
+        <el-button type="primary" icon="el-icon-refresh" size="mini" style="margin-bottom: 20px;" @click="getRecommond(true, true)">换一批</el-button>
         <div v-if="moreArtcleList.length === 0" class="more-article-item nomore">暂无更多</div>
         <div v-for="(article, index) in moreArtcleList" :key="index">
           <el-tooltip effect="dark" :content="article.item" placement="top-start">
@@ -67,8 +67,9 @@
 </template>
 
 <script>
-import $ from 'jquery'
-import { getRecommend, getHighlight, getContent } from '@/api/recommend'
+import $, { now } from 'jquery'
+import { getRecommend, getHighlight, getContent, uploadUserLog } from '@/api/recommend'
+import { genUserId } from '@/utils/index';
 const refreshTime = 300
 
 const throttle = (func, wait = 50) => {
@@ -112,6 +113,7 @@ export default {
       highlightTextArr: [],
       highlightLoading: false,
       mainArticleLoading: false,
+      userid: genUserId(),
     }
   },
   computed: {
@@ -123,7 +125,7 @@ export default {
     csvData(newVal) {
       if (newVal.length !== 0) {
         this.mainArticle = newVal[0]
-        this.moreArtcleList = newVal.filter((value, index, array) => index > 0)
+        this.moreArtcleList = newVal.filter((value, index, array) => index > 0).slice(0, 10)
         this.$nextTick(() => {
           this.getAreas()
         })
@@ -217,7 +219,20 @@ export default {
 
       return areaName
     },
-    async getRecommond(refresh = false, append = false) {
+    recByParagraph(content) {
+      try {
+        uploadUserLog([{
+          feedid: this.mainArticle.feedid,
+          userid: this.userid,
+          timestamp: (new Date().getTime()).toString(),
+          actiontype: 2 // 点击段落
+        }])
+      } catch (error) {
+        
+      }
+      this.getRecommond(false, true, content);
+    },
+    async getRecommond(refresh = false, append = false, content) {
       if (append) {
         this.bottomLoading = true
       } else {
@@ -234,7 +249,7 @@ export default {
               content: ''
             }] : this.mainArticle?.item ? [{
               title: this.mainArticle.item,
-              content: this.highlightTextArr.join(',')
+              content: content || this.highlightTextArr.join(',')
             }] : [{
               title: '',
               content: ''
@@ -258,13 +273,46 @@ export default {
           },
           'debug': 0
         })
-        console.log(data)
         
         if (append && this.csvData.length !== 0) {
           let first
           first = JSON.parse(JSON.stringify(this.csvData[0]))
           data.unshift(first)
           data.splice(data.length - 1, 1)
+        }
+
+        try {
+          if (append) {
+            // const userid = genUserId();
+            const userLog = data.slice(1, data.length).map((item) => {
+              return {
+                feedid: item.feedid,
+                userid: this.userid,
+                timestamp: (new Date().getTime()).toString(),
+                actiontype: 0
+              }
+            });
+            uploadUserLog(userLog)
+          } else {
+            // const userid = genUserId();
+            const userLog = data.map((item) => {
+              return {
+                feedid: item.feedid,
+                userid: this.userid,
+                timestamp: (new Date().getTime()).toString(),
+                actiontype: 0
+              }
+            });
+            userLog.push({
+              feedid: data[0].feedid,
+              userid: this.userid,
+              timestamp: (new Date().getTime()).toString(),
+              actiontype: 1
+            });
+            uploadUserLog(userLog)
+          }
+        } catch (error) {
+          console.log(error)
         }
 
         this.csvData = data
@@ -365,6 +413,17 @@ export default {
     changeMainContent(item) {
       this.csvData.splice(0, 1, JSON.parse(JSON.stringify(item)))
       this.highlightTextArr = []
+      try {
+        uploadUserLog([{
+          feedid: item.feedid,
+          userid: this.userid,
+          timestamp: (new Date().getTime()).toString(),
+          actiontype: 1
+        }])
+      } catch (error) {
+        
+      }
+      
       this.$nextTick(() => {
         this.mainArticleContent = ''
         this.getContent();
@@ -434,6 +493,11 @@ export default {
           white-space: pre-wrap;
           text-align: left;
           text-indent: 2em;
+          cursor: pointer;
+
+          &:hover {
+            background: rgba($color: #999999, $alpha: 0.1);
+          }
         }
       }
     }
